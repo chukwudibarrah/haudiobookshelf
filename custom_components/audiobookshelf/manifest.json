@@ -4,10 +4,10 @@
   "codeowners": ["@chukwudibarrah"],
   "config_flow": true,
   "dependencies": ["frontend", "http", "websocket_api"],
-  "documentation": "https://github.com/chukwudibarrah/hass-audiobookshelf-card",
+  "documentation": "https://github.com/chukwudibarrah/haudiobookshelf",
   "integration_type": "service",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/chukwudibarrah/hass-audiobookshelf-card/issues",
+  "issue_tracker": "https://github.com/chukwudibarrah/haudiobookshelf/issues",
   "requirements": [],
   "version": "1.0.0"
 }

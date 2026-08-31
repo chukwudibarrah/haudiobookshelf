@@ -12,5 +12,5 @@ register, and your API token never reaches the browser.
 and an API token (Audiobookshelf → Settings → API Keys, or Settings → Users on
 older versions).
 
-See the [README](https://github.com/chukwudibarrah/hass-audiobookshelf-card)
+See the [README](https://github.com/chukwudibarrah/haudiobookshelf)
 for entities, card options and services.

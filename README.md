@@ -29,7 +29,7 @@ asks Home Assistant to sign those URLs before putting them in an `<img>`.
 ### HACS (recommended)
 
 1. HACS → **⋮** → **Custom repositories**
-2. Add `https://github.com/chukwudibarrah/hass-audiobookshelf-card` with category
+2. Add `https://github.com/chukwudibarrah/haudiobookshelf` with category
    **Integration**
 3. Search for **Audiobookshelf**, install it, and restart Home Assistant
 4. **Settings → Devices & Services → Add Integration → Audiobookshelf**
@@ -230,5 +230,5 @@ with it.
 [abs]: https://www.audiobookshelf.org/
 [hacs-badge]: https://img.shields.io/badge/HACS-Custom-41BDF5.svg
 [hacs-url]: https://hacs.xyz/
-[validate-badge]: https://github.com/chukwudibarrah/hass-audiobookshelf-card/actions/workflows/validate.yml/badge.svg
-[validate-url]: https://github.com/chukwudibarrah/hass-audiobookshelf-card/actions/workflows/validate.yml
+[validate-badge]: https://github.com/chukwudibarrah/haudiobookshelf/actions/workflows/validate.yml/badge.svg
+[validate-url]: https://github.com/chukwudibarrah/haudiobookshelf/actions/workflows/validate.yml
