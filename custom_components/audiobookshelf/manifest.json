@@ -1,0 +1,13 @@
+{
+  "domain": "audiobookshelf",
+  "name": "Audiobookshelf",
+  "codeowners": ["@chukwudibarrah"],
+  "config_flow": true,
+  "dependencies": ["frontend", "http", "websocket_api"],
+  "documentation": "https://github.com/chukwudibarrah/hass-audiobookshelf-card",
+  "integration_type": "service",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/chukwudibarrah/hass-audiobookshelf-card/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}

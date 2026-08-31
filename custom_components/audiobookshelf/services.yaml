@@ -1,0 +1,113 @@
+mark_finished:
+  name: Mark finished
+  description: Mark a library item as finished for the connected Audiobookshelf user.
+  fields:
+    item_id:
+      name: Item ID
+      description: The Audiobookshelf library item ID.
+      required: true
+      example: li_bufnnmp4y5o2gbbxfm
+      selector:
+        text:
+    episode_id:
+      name: Episode ID
+      description: The podcast episode ID, if the item is a podcast.
+      required: false
+      example: ep_lh6ko39pumnrma3dhv
+      selector:
+        text:
+    config_entry_id:
+      name: Server
+      description: Which Audiobookshelf server to use. Only needed if you have more than one.
+      required: false
+      selector:
+        config_entry:
+          integration: audiobookshelf
+
+mark_unfinished:
+  name: Mark unfinished
+  description: Mark a library item as unfinished and rewind it to the beginning.
+  fields:
+    item_id:
+      name: Item ID
+      description: The Audiobookshelf library item ID.
+      required: true
+      example: li_bufnnmp4y5o2gbbxfm
+      selector:
+        text:
+    episode_id:
+      name: Episode ID
+      description: The podcast episode ID, if the item is a podcast.
+      required: false
+      selector:
+        text:
+    config_entry_id:
+      name: Server
+      description: Which Audiobookshelf server to use. Only needed if you have more than one.
+      required: false
+      selector:
+        config_entry:
+          integration: audiobookshelf
+
+set_progress:
+  name: Set progress
+  description: >-
+    Move the playback position of a library item. Give either a time in seconds
+    or a percentage, not both.
+  fields:
+    item_id:
+      name: Item ID
+      description: The Audiobookshelf library item ID.
+      required: true
+      example: li_bufnnmp4y5o2gbbxfm
+      selector:
+        text:
+    current_time:
+      name: Position
+      description: Playback position in seconds from the start of the item.
+      required: false
+      example: 3600
+      selector:
+        number:
+          min: 0
+          max: 360000
+          step: 1
+          unit_of_measurement: s
+          mode: box
+    percent:
+      name: Percent
+      description: Playback position as a percentage of the item's duration.
+      required: false
+      example: 42
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+          unit_of_measurement: "%"
+          mode: box
+    episode_id:
+      name: Episode ID
+      description: The podcast episode ID, if the item is a podcast.
+      required: false
+      selector:
+        text:
+    config_entry_id:
+      name: Server
+      description: Which Audiobookshelf server to use. Only needed if you have more than one.
+      required: false
+      selector:
+        config_entry:
+          integration: audiobookshelf
+
+refresh:
+  name: Refresh
+  description: Poll Audiobookshelf immediately instead of waiting for the next update.
+  fields:
+    config_entry_id:
+      name: Server
+      description: Which Audiobookshelf server to refresh. Omit to refresh all of them.
+      required: false
+      selector:
+        config_entry:
+          integration: audiobookshelf

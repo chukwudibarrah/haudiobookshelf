@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  version:
+    name: Stamp the manifest version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set version from the release tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          python - "$version" <<'PY'
+          import json, sys, pathlib
+          path = pathlib.Path("custom_components/audiobookshelf/manifest.json")
+          manifest = json.loads(path.read_text())
+          manifest["version"] = sys.argv[1]
+          path.write_text(json.dumps(manifest, indent=2) + "\n")
+          PY
+      - name: Fail if the manifest was out of date
+        run: |
+          if ! git diff --quiet; then
+            echo "manifest.json version does not match the release tag:"
+            git --no-pager diff
+            exit 1
+          fi

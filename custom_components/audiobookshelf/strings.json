@@ -1,0 +1,119 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Audiobookshelf",
+        "description": "Enter the address of your Audiobookshelf server and an API token. In Audiobookshelf, go to Settings → Users, open your user and copy the API token (on 2.26 and newer, Settings → API Keys).",
+        "data": {
+          "url": "Server URL",
+          "token": "API token",
+          "verify_ssl": "Verify SSL certificate"
+        },
+        "data_description": {
+          "url": "For example http://192.168.1.10:13378",
+          "verify_ssl": "Turn this off only if your server uses a self-signed certificate."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect to Audiobookshelf",
+        "description": "The API token for {url} is no longer accepted. Enter a new one.",
+        "data": {
+          "token": "API token"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the server. Check the address, the port and that Home Assistant can see it.",
+      "invalid_auth": "Audiobookshelf rejected that API token.",
+      "invalid_url": "That does not look like a valid URL.",
+      "unknown": "Unexpected error. Check the Home Assistant log for details."
+    },
+    "abort": {
+      "already_configured": "This Audiobookshelf user is already set up.",
+      "reauth_successful": "Reconnected to Audiobookshelf."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Audiobookshelf options",
+        "data": {
+          "scan_interval": "Update interval",
+          "max_items": "Items per list",
+          "active_window": "Now listening window",
+          "libraries": "Libraries",
+          "public_url": "Public URL"
+        },
+        "data_description": {
+          "scan_interval": "How often to poll the server.",
+          "max_items": "How many books to keep in the in progress, finished and recently added lists.",
+          "active_window": "How recently progress must have been synced for the Listening sensor to be on.",
+          "libraries": "Which libraries to include in the recently added list. Leave empty for all of them.",
+          "public_url": "Address to use when opening a book from the card, if it differs from the URL Home Assistant connects to."
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "listening": { "name": "Listening" }
+    },
+    "sensor": {
+      "now_listening": { "name": "Now listening" },
+      "now_author": { "name": "Now listening author" },
+      "now_progress": { "name": "Now listening progress" },
+      "now_remaining": { "name": "Now listening remaining" },
+      "last_finished": { "name": "Last finished" },
+      "books_in_progress": { "name": "Books in progress" },
+      "books_finished": { "name": "Books finished" },
+      "recently_added": { "name": "Recently added" },
+      "listening_today": { "name": "Listening time today" },
+      "listening_week": { "name": "Listening time this week" },
+      "listening_total": { "name": "Listening time total" },
+      "listening_streak": { "name": "Listening streak" },
+      "library_items": { "name": "Library items" }
+    },
+    "image": {
+      "now_cover": { "name": "Now listening cover" },
+      "last_finished_cover": { "name": "Last finished cover" }
+    }
+  },
+  "services": {
+    "mark_finished": {
+      "name": "Mark finished",
+      "description": "Mark a library item as finished for the connected Audiobookshelf user.",
+      "fields": {
+        "item_id": { "name": "Item ID", "description": "The Audiobookshelf library item ID." },
+        "episode_id": { "name": "Episode ID", "description": "The podcast episode ID, if the item is a podcast." },
+        "config_entry_id": { "name": "Server", "description": "Which Audiobookshelf server to use. Only needed if you have more than one." }
+      }
+    },
+    "mark_unfinished": {
+      "name": "Mark unfinished",
+      "description": "Mark a library item as unfinished and rewind it to the beginning.",
+      "fields": {
+        "item_id": { "name": "Item ID", "description": "The Audiobookshelf library item ID." },
+        "episode_id": { "name": "Episode ID", "description": "The podcast episode ID, if the item is a podcast." },
+        "config_entry_id": { "name": "Server", "description": "Which Audiobookshelf server to use. Only needed if you have more than one." }
+      }
+    },
+    "set_progress": {
+      "name": "Set progress",
+      "description": "Move the playback position of a library item. Give either a time in seconds or a percentage, not both.",
+      "fields": {
+        "item_id": { "name": "Item ID", "description": "The Audiobookshelf library item ID." },
+        "current_time": { "name": "Position", "description": "Playback position in seconds from the start of the item." },
+        "percent": { "name": "Percent", "description": "Playback position as a percentage of the item's duration." },
+        "episode_id": { "name": "Episode ID", "description": "The podcast episode ID, if the item is a podcast." },
+        "config_entry_id": { "name": "Server", "description": "Which Audiobookshelf server to use. Only needed if you have more than one." }
+      }
+    },
+    "refresh": {
+      "name": "Refresh",
+      "description": "Poll Audiobookshelf immediately instead of waiting for the next update.",
+      "fields": {
+        "config_entry_id": { "name": "Server", "description": "Which Audiobookshelf server to refresh. Omit to refresh all of them." }
+      }
+    }
+  }
+}
