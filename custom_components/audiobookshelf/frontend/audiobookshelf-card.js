@@ -26,6 +26,11 @@ const DEFAULTS = {
 const SIGN_EXPIRY = 3600;
 const SIGN_REFRESH = 2400 * 1000;
 
+/* Back-off for retrying a failed subscription, e.g. when the dashboard loads
+ * before the integration has finished starting. */
+const RETRY_MIN = 5 * 1000;
+const RETRY_MAX = 60 * 1000;
+
 const escapeHtml = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -331,6 +336,8 @@ class AudiobookshelfCard extends HTMLElement {
     this._error = null;
     this._unsub = null;
     this._subscribing = false;
+    this._retryTimer = null;
+    this._retryDelay = RETRY_MIN;
     this._covers = new Map();
     this._signedAt = 0;
     this._busy = new Set();
@@ -358,7 +365,16 @@ class AudiobookshelfCard extends HTMLElement {
       throw new Error("audiobookshelf-card: at least one section is required");
     }
 
+    const previousEntry = this._config.entry_id || null;
     this._config = { ...DEFAULTS, ...config, sections };
+    if ((this._config.entry_id || null) !== previousEntry && this._hass) {
+      /* Pointed at a different server: drop the old feed and its data. */
+      this._unsubscribe();
+      this._cancelRetry();
+      this._data = null;
+      this._error = null;
+      this._subscribe();
+    }
     this._config.limit = Math.max(1, Math.min(50, Number(this._config.limit) || DEFAULTS.limit));
     this._rendered = false;
     this._render();
@@ -375,6 +391,7 @@ class AudiobookshelfCard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._cancelRetry();
     this._unsubscribe();
   }
 
@@ -398,35 +415,76 @@ class AudiobookshelfCard extends HTMLElement {
 
   async _subscribe() {
     if (this._unsub || this._subscribing || !this._hass) return;
+    this._cancelRetry();
     this._subscribing = true;
+    const entryId = this._config.entry_id || null;
     const message = { type: "audiobookshelf/subscribe" };
-    if (this._config.entry_id) message.entry_id = this._config.entry_id;
+    if (entryId) message.entry_id = entryId;
 
+    let unsub = null;
+    let error = null;
     try {
-      this._unsub = await this._hass.connection.subscribeMessage(
-        (data) => this._onData(data),
-        message,
-      );
-      this._error = null;
+      unsub = await this._hass.connection.subscribeMessage((data) => {
+        /* Ignore a feed for a server the card is no longer pointed at. */
+        if (entryId === (this._config.entry_id || null)) this._onData(data);
+      }, message);
     } catch (err) {
+      error = err;
+    }
+    this._subscribing = false;
+
+    if (error) {
       this._error =
-        err && err.code === "not_found"
+        error.code === "not_found"
           ? "No Audiobookshelf server found. If you have more than one, set entry_id in the card configuration."
-          : `Could not subscribe to Audiobookshelf: ${err?.message || err}`;
+          : `Could not subscribe to Audiobookshelf: ${error.message || error}`;
       this._render();
-    } finally {
-      this._subscribing = false;
+      this._scheduleRetry();
+      return;
+    }
+    if (entryId !== (this._config.entry_id || null)) {
+      /* The config changed while we were waiting; subscribe to the new one. */
+      this._release(unsub);
+      this._subscribe();
+      return;
+    }
+
+    this._unsub = unsub;
+    this._retryDelay = RETRY_MIN;
+    if (this._error) {
+      this._error = null;
+      this._render();
     }
   }
 
   _unsubscribe() {
     if (this._unsub) {
-      // subscribeMessage resolves to the unsubscribe function; it rejects if
-      // the connection already went away, which is not worth surfacing.
-      Promise.resolve(this._unsub)
-        .then((unsub) => unsub && unsub())
-        .catch(() => {});
+      this._release(this._unsub);
       this._unsub = null;
+    }
+  }
+
+  /** Call an unsubscribe function, ignoring a connection that already went away. */
+  _release(unsub) {
+    Promise.resolve()
+      .then(() => unsub && unsub())
+      .catch(() => {});
+  }
+
+  _scheduleRetry() {
+    if (this._retryTimer) return;
+    const delay = this._retryDelay;
+    this._retryDelay = Math.min(this._retryDelay * 2, RETRY_MAX);
+    this._retryTimer = setTimeout(() => {
+      this._retryTimer = null;
+      this._subscribe();
+    }, delay);
+  }
+
+  _cancelRetry() {
+    if (this._retryTimer) {
+      clearTimeout(this._retryTimer);
+      this._retryTimer = null;
     }
   }
 
@@ -573,12 +631,17 @@ class AudiobookshelfCard extends HTMLElement {
   }
 
   _statsHtml(stats) {
+    /* null means Audiobookshelf has not returned listening stats yet. */
+    const time = (seconds) => (seconds == null ? "–" : formatDuration(seconds));
     const tiles = [
-      { value: formatDuration(stats.today_seconds), label: "Today" },
-      { value: formatDuration(stats.week_seconds), label: "This week" },
-      { value: `${Math.round((stats.total_seconds || 0) / 3600)}h`, label: "Total" },
+      { value: time(stats.today_seconds), label: "Today" },
+      { value: time(stats.week_seconds), label: "This week" },
+      {
+        value: stats.total_seconds == null ? "–" : `${Math.round(stats.total_seconds / 3600)}h`,
+        label: "Total",
+      },
       { value: stats.books_finished ?? 0, label: "Finished" },
-      { value: stats.streak_days ?? 0, label: "Day streak" },
+      { value: stats.streak_days ?? "–", label: "Day streak" },
     ];
 
     const days = stats.recent_days || [];

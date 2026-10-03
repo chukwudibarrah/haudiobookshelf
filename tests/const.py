@@ -163,3 +163,33 @@ LISTENING_STATS = {
     "today": 3600,
     "recentSessions": [],
 }
+
+# A podcast with two finished episodes, newer than any finished book.
+PODCAST = {
+    "id": "li_podcast",
+    "libraryId": "lib_pods",
+    "mediaType": "podcast",
+    "addedAt": NOW_MS - 1_000_000_000,
+    "media": {
+        "metadata": {"title": "Cortex", "author": "Relay FM"},
+        "episodes": [
+            {"id": "ep_1", "title": "Episode 1: Beginnings", "duration": 3600.0},
+            {"id": "ep_2", "title": "Episode 2: Systems", "duration": 5400.0},
+        ],
+    },
+}
+
+PODCAST_PROGRESS = [
+    {
+        "id": f"prog_{episode_id}",
+        "libraryItemId": "li_podcast",
+        "episodeId": episode_id,
+        "duration": duration,
+        "progress": 1,
+        "currentTime": duration,
+        "isFinished": True,
+        "lastUpdate": NOW_MS - offset,
+        "finishedAt": NOW_MS - offset,
+    }
+    for episode_id, duration, offset in (("ep_1", 3600.0, 2_000), ("ep_2", 5400.0, 1_000))
+]

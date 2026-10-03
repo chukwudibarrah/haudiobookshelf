@@ -75,6 +75,15 @@ def _normalise_url(url: str) -> str:
     return url
 
 
+def _is_same_user(entry: ConfigEntry, user: dict[str, Any]) -> bool:
+    """Return whether a validated user is the one an entry was set up for.
+
+    An entry tracks one user's progress. A token for anyone else would
+    silently swap whose books it shows, so reauth and reconfigure refuse it.
+    """
+    return str(entry.unique_id).rsplit("::", 1)[-1] == str(user.get("id"))
+
+
 class AudiobookshelfConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle the Audiobookshelf config flow."""
 
@@ -158,11 +167,13 @@ class AudiobookshelfConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             token = user_input[CONF_TOKEN].strip()
-            _, error = await self._async_validate(
+            user, error = await self._async_validate(
                 entry.data[CONF_URL], token, entry.data.get(CONF_VERIFY_SSL, True)
             )
             if error:
                 errors["base"] = error
+            elif not _is_same_user(entry, user or {}):
+                errors["base"] = "wrong_account"
             else:
                 return self.async_update_reload_and_abort(
                     entry, data={**entry.data, CONF_TOKEN: token}
@@ -203,9 +214,7 @@ class AudiobookshelfConfigFlow(ConfigFlow, domain=DOMAIN):
                     errors["base"] = error
                 else:
                     assert user is not None
-                    # The entry tracks one user's progress; pointing it at a
-                    # different account would silently swap whose books it shows.
-                    if str(entry.unique_id).rsplit("::", 1)[-1] != str(user.get("id")):
+                    if not _is_same_user(entry, user):
                         errors["base"] = "wrong_account"
                     else:
                         unique_id = f"{url}::{user.get('id')}"

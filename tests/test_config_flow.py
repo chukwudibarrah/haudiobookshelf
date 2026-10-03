@@ -223,3 +223,17 @@ async def test_reconfigure_onto_existing_entry_aborts(
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
     assert mock_config_entry.data[CONF_URL] == MOCK_URL
+
+
+async def test_reauth_rejects_another_user(hass, mock_config_entry, mock_client) -> None:
+    """Reauth with someone else's token is refused, keeping the old token."""
+    await setup_integration(hass, mock_config_entry)
+    mock_client.async_validate.return_value = {"id": "usr_someone_else"}
+
+    result = await mock_config_entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TOKEN: "exp_theirs"}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "wrong_account"}
+    assert mock_config_entry.data[CONF_TOKEN] == MOCK_TOKEN
