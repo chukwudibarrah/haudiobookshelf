@@ -50,6 +50,20 @@ def test_manifest_is_hassfest_shaped() -> None:
     assert manifest["domain"] == COMPONENT.name
 
 
+def test_repository_links_are_current() -> None:
+    """Every GitHub link that ships points at this repository.
+
+    The repository was renamed once and the card kept the old name.
+    """
+    repository = _load("manifest.json")["documentation"]
+    owner = repository.rsplit("/", 2)[-2]
+    for path in COMPONENT.rglob("*"):
+        if path.suffix not in {".js", ".json", ".py", ".yaml"}:
+            continue
+        for link in re.findall(rf"https://github\.com/{owner}/[\w.-]+", path.read_text()):
+            assert link == repository, f"{path.name} links to {link}"
+
+
 def test_hacs_manifest() -> None:
     """HACS needs a name and a minimum Home Assistant version."""
     hacs = json.loads((COMPONENT.parent.parent / "hacs.json").read_text())

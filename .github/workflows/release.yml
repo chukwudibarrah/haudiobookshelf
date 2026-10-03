@@ -9,7 +9,7 @@ jobs:
     name: Stamp the manifest version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set version from the release tag
         run: |
           version="${GITHUB_REF_NAME#v}"

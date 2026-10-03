@@ -896,7 +896,7 @@ if (!window.customCards.some((card) => card.type === "audiobookshelf-card")) {
     preview: true,
     description:
       "What you are listening to, what you just finished, and how much you have listened.",
-    documentationURL: "https://github.com/chukwudibarrah/hass-audiobookshelf-card",
+    documentationURL: "https://github.com/chukwudibarrah/haudiobookshelf#the-card",
   });
 }
 

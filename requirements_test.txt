@@ -1,2 +1,5 @@
-pytest-homeassistant-custom-component
-home-assistant-frontend
+# Pinned so CI is reproducible; Dependabot proposes upgrades weekly.
+# Each pytest-homeassistant-custom-component release pins one Home Assistant
+# version (0.13.367 is Home Assistant 2026.9.4).
+pytest-homeassistant-custom-component==0.13.367
+home-assistant-frontend==20260930.0

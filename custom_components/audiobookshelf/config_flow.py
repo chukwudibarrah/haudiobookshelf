@@ -181,6 +181,78 @@ class AudiobookshelfConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change the server address, token or SSL setting of an entry."""
+        errors: dict[str, str] = {}
+        entry = self._get_reconfigure_entry()
+
+        if user_input is not None:
+            url = _normalise_url(user_input[CONF_URL])
+            # A blank token keeps the current one, so moving the server to a
+            # new address does not mean digging the token out again.
+            token = (user_input.get(CONF_TOKEN) or "").strip() or entry.data[CONF_TOKEN]
+            verify_ssl = user_input.get(CONF_VERIFY_SSL, True)
+
+            if not urlparse(url).netloc:
+                errors["base"] = "invalid_url"
+            else:
+                user, error = await self._async_validate(url, token, verify_ssl)
+                if error:
+                    errors["base"] = error
+                else:
+                    assert user is not None
+                    # The entry tracks one user's progress; pointing it at a
+                    # different account would silently swap whose books it shows.
+                    if str(entry.unique_id).rsplit("::", 1)[-1] != str(user.get("id")):
+                        errors["base"] = "wrong_account"
+                    else:
+                        unique_id = f"{url}::{user.get('id')}"
+                        if any(
+                            other.unique_id == unique_id
+                            for other in self._async_current_entries()
+                            if other.entry_id != entry.entry_id
+                        ):
+                            return self.async_abort(reason="already_configured")
+                        return self.async_update_reload_and_abort(
+                            entry,
+                            unique_id=unique_id,
+                            data={
+                                **entry.data,
+                                CONF_URL: url,
+                                CONF_TOKEN: token,
+                                CONF_VERIFY_SSL: verify_ssl,
+                            },
+                        )
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(
+                    {
+                        vol.Required(CONF_URL): TextSelector(
+                            TextSelectorConfig(type=TextSelectorType.URL)
+                        ),
+                        vol.Optional(CONF_TOKEN): TextSelector(
+                            TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                        ),
+                        vol.Optional(CONF_VERIFY_SSL, default=True): BooleanSelector(),
+                    }
+                ),
+                {
+                    CONF_URL: entry.data[CONF_URL],
+                    CONF_VERIFY_SSL: entry.data.get(CONF_VERIFY_SSL, True),
+                    **{
+                        key: value
+                        for key, value in (user_input or {}).items()
+                        if key != CONF_TOKEN
+                    },
+                },
+            ),
+            errors=errors,
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> AudiobookshelfOptionsFlow:
