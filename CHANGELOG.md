@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Added a *Reconfigure* option to change the server URL, API token or SSL
+  setting without removing the integration. Leave the token blank to keep the
+  current one; a token for a different Audiobookshelf user is refused.
+- Fixed the card's documentation link, which still pointed at the old
+  repository name.
+
 ## 1.0.0
 
 First release.

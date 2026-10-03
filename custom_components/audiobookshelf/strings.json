@@ -20,17 +20,33 @@
         "data": {
           "token": "API token"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Audiobookshelf",
+        "description": "Change how Home Assistant connects to your Audiobookshelf server. The new details must belong to the same Audiobookshelf user.",
+        "data": {
+          "url": "Server URL",
+          "token": "API token",
+          "verify_ssl": "Verify SSL certificate"
+        },
+        "data_description": {
+          "url": "For example http://192.168.1.10:13378",
+          "token": "Leave blank to keep the current token.",
+          "verify_ssl": "Turn this off only if your server uses a self-signed certificate."
+        }
       }
     },
     "error": {
       "cannot_connect": "Could not reach the server. Check the address, the port and that Home Assistant can see it.",
       "invalid_auth": "Audiobookshelf rejected that API token.",
       "invalid_url": "That does not look like a valid URL.",
-      "unknown": "Unexpected error. Check the Home Assistant log for details."
+      "unknown": "Unexpected error. Check the Home Assistant log for details.",
+      "wrong_account": "That token belongs to a different Audiobookshelf user. To track another user, add the integration again instead."
     },
     "abort": {
       "already_configured": "This Audiobookshelf user is already set up.",
-      "reauth_successful": "Reconnected to Audiobookshelf."
+      "reauth_successful": "Reconnected to Audiobookshelf.",
+      "reconfigure_successful": "Audiobookshelf connection updated."
     }
   },
   "options": {

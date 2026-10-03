@@ -6,6 +6,7 @@ import datetime as dt
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.audiobookshelf.const import (
@@ -79,10 +80,12 @@ def build_client_mock() -> AsyncMock:
 def _stats_with_today() -> dict:
     """Listening stats whose day keys line up with the real 'today'.
 
-    The streak and week calculations key off the local date, so the fixture has
-    to move with the clock rather than sit on a fixed date.
+    The streak and week calculations key off Home Assistant's local date, so the
+    fixture has to move with that clock rather than sit on a fixed date. It must
+    not use the machine's date: the test harness runs Home Assistant in
+    US/Pacific, which is a day behind UTC for eight hours of every day.
     """
-    today = dt.date.today()
+    today = dt_util.now().date()
     days = {
         (today - dt.timedelta(days=offset)).isoformat(): 3600 - offset * 100
         for offset in range(4)
@@ -93,8 +96,12 @@ def _stats_with_today() -> dict:
 
 
 @pytest.fixture
-def mock_client():
-    """Patch the API client everywhere the integration constructs one."""
+def mock_client(hass):
+    """Patch the API client everywhere the integration constructs one.
+
+    Depends on ``hass`` so Home Assistant's time zone is set before the
+    listening-stats fixture works out what "today" is.
+    """
     client = build_client_mock()
     with (
         patch(

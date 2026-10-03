@@ -130,3 +130,96 @@ async def test_options_flow(hass, mock_config_entry, mock_client) -> None:
     assert mock_config_entry.options[CONF_SCAN_INTERVAL] == 90
     assert mock_config_entry.options[CONF_LIBRARIES] == ["lib_books"]
     assert mock_config_entry.options["public_url"] == "https://books.example.com"
+
+
+async def test_reconfigure_moves_server_and_keeps_token(
+    hass, mock_config_entry, mock_client
+) -> None:
+    """A new address is saved, and a blank token keeps the existing one."""
+    await setup_integration(hass, mock_config_entry)
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_URL: "https://books.example.com/", CONF_VERIFY_SSL: False},
+    )
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert mock_config_entry.data == {
+        CONF_URL: "https://books.example.com",
+        CONF_TOKEN: MOCK_TOKEN,
+        CONF_VERIFY_SSL: False,
+    }
+    # The unique ID includes the URL, so it follows the move.
+    assert mock_config_entry.unique_id == "https://books.example.com::usr_abc123"
+
+
+async def test_reconfigure_replaces_token(hass, mock_config_entry, mock_client) -> None:
+    """A token typed into the form replaces the stored one."""
+    await setup_integration(hass, mock_config_entry)
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_URL: MOCK_URL, CONF_TOKEN: " exp_newtoken "}
+    )
+    await hass.async_block_till_done()
+    assert result["reason"] == "reconfigure_successful"
+    assert mock_config_entry.data[CONF_TOKEN] == "exp_newtoken"
+    assert mock_config_entry.unique_id == f"{MOCK_URL}::usr_abc123"
+
+
+async def test_reconfigure_rejects_another_user(hass, mock_config_entry, mock_client) -> None:
+    """A token for a different user is refused rather than swapping accounts."""
+    await setup_integration(hass, mock_config_entry)
+    mock_client.async_validate.return_value = {"id": "usr_someone_else"}
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_URL: MOCK_URL, CONF_TOKEN: "exp_theirs"}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "wrong_account"}
+    assert mock_config_entry.data[CONF_TOKEN] == MOCK_TOKEN
+
+
+async def test_reconfigure_reports_connection_errors(
+    hass, mock_config_entry, mock_client
+) -> None:
+    """An unreachable new address leaves the entry untouched."""
+    await setup_integration(hass, mock_config_entry)
+    mock_client.async_validate.side_effect = AudiobookshelfConnectionError("down")
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_URL: "http://nowhere:13378"}
+    )
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert mock_config_entry.data[CONF_URL] == MOCK_URL
+
+
+async def test_reconfigure_onto_existing_entry_aborts(
+    hass, mock_config_entry, mock_client
+) -> None:
+    """Moving onto an address another entry already uses for this user is refused."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    other = MockConfigEntry(
+        domain=DOMAIN,
+        title="Audiobookshelf (badrat, remote)",
+        unique_id="https://books.example.com::usr_abc123",
+        data={CONF_URL: "https://books.example.com", CONF_TOKEN: MOCK_TOKEN},
+    )
+    other.add_to_hass(hass)
+    await setup_integration(hass, mock_config_entry)
+
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_URL: "https://books.example.com"}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    assert mock_config_entry.data[CONF_URL] == MOCK_URL

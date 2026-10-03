@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from homeassistant.util import dt as dt_util
+
 from custom_components.audiobookshelf.const import DOMAIN
 
 from .test_init import setup_integration
@@ -68,6 +70,28 @@ async def test_stats_and_streak(hass, mock_config_entry, mock_client) -> None:
     assert stats["library_items"] == 412 * 2
     assert len(stats["recent_days"]) == 30
     assert stats["recent_days"][-1]["seconds"] == 3600
+
+
+async def test_stats_use_home_assistant_date(
+    hass, mock_config_entry, mock_client, freezer
+) -> None:
+    """Days are keyed on Home Assistant's local date, not the machine's.
+
+    At 04:00 UTC it is still the previous evening in the test time zone
+    (US/Pacific), so the two dates disagree.
+    """
+    from .conftest import _stats_with_today
+
+    freezer.move_to("2026-03-10T04:00:00+00:00")
+    assert dt_util.now().date().isoformat() == "2026-03-09"
+    mock_client.async_get_listening_stats.return_value = _stats_with_today()
+
+    await setup_integration(hass, mock_config_entry)
+    stats = hass.data[DOMAIN][mock_config_entry.entry_id].data["stats"]
+
+    assert stats["week_seconds"] == 13800 + 1800
+    assert stats["streak_days"] == 4
+    assert stats["recent_days"][-1] == {"date": "2026-03-09", "seconds": 3600}
 
 
 async def test_recently_added_is_sorted_across_libraries(
