@@ -174,3 +174,88 @@ async def test_empty_server_does_not_crash(hass, mock_config_entry, mock_client)
     assert data["finished"] == []
     assert data["is_listening"] is False
     assert data["stats"]["streak_days"] == 0
+
+
+async def _setup_with_podcast(hass, entry, client) -> dict:
+    """Add finished podcast episodes to the fixtures and set up."""
+    from unittest.mock import patch
+
+    from .const import ITEM_DETAILS, ME, PODCAST, PODCAST_PROGRESS
+
+    client.async_get_me.return_value = {
+        **ME,
+        "mediaProgress": ME["mediaProgress"] + PODCAST_PROGRESS,
+    }
+    with patch.dict(ITEM_DETAILS, {PODCAST["id"]: PODCAST}):
+        await setup_integration(hass, entry)
+    return hass.data[DOMAIN][entry.entry_id].data
+
+
+async def test_finished_podcast_episodes_keep_their_identity(
+    hass, mock_config_entry, mock_client
+) -> None:
+    """Each finished episode is shown as itself, not as its podcast."""
+    data = await _setup_with_podcast(hass, mock_config_entry, mock_client)
+
+    episodes = [book for book in data["finished"] if book["id"] == "li_podcast"]
+    assert [(book["episode_id"], book["title"]) for book in episodes] == [
+        ("ep_2", "Episode 2: Systems"),
+        ("ep_1", "Episode 1: Beginnings"),
+    ]
+    assert all(book["book_title"] == "Cortex" for book in episodes)
+    assert all(book["author"] == "Relay FM" for book in episodes)
+    assert [book["duration"] for book in episodes] == [5400, 3600]
+
+
+async def test_finished_episode_missing_from_podcast(
+    hass, mock_config_entry, mock_client
+) -> None:
+    """An episode since removed from the feed still keeps its ID."""
+    from unittest.mock import patch
+
+    from .const import ITEM_DETAILS, ME, PODCAST, PODCAST_PROGRESS
+
+    mock_client.async_get_me.return_value = {
+        **ME,
+        "mediaProgress": ME["mediaProgress"] + PODCAST_PROGRESS,
+    }
+    trimmed = {**PODCAST, "media": {**PODCAST["media"], "episodes": []}}
+    with patch.dict(ITEM_DETAILS, {PODCAST["id"]: trimmed}):
+        await setup_integration(hass, mock_config_entry)
+    finished = hass.data[DOMAIN][mock_config_entry.entry_id].data["finished"]
+
+    assert finished[0]["episode_id"] == "ep_2"
+    assert finished[0]["title"] == "Cortex"
+
+
+async def test_get_book_matches_the_episode(hass, mock_config_entry, mock_client) -> None:
+    """Episodes share an item ID, so lookups use the episode ID too."""
+    await _setup_with_podcast(hass, mock_config_entry, mock_client)
+    coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]
+
+    assert coordinator.async_get_book("li_podcast", "ep_1")["duration"] == 3600
+    assert coordinator.async_get_book("li_podcast", "ep_2")["duration"] == 5400
+    assert coordinator.async_get_book("li_podcast", "ep_missing") is None
+    # Without an episode ID, the first match is still returned.
+    assert coordinator.async_get_book("li_podcast")["episode_id"] == "ep_2"
+
+
+async def test_stats_are_unknown_until_fetched(hass, mock_config_entry, mock_client) -> None:
+    """A failed stats fetch reports nothing rather than a false zero."""
+    from custom_components.audiobookshelf.api import AudiobookshelfConnectionError
+
+    mock_client.async_get_listening_stats.side_effect = AudiobookshelfConnectionError("x")
+    await setup_integration(hass, mock_config_entry)
+    coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]
+    stats = coordinator.data["stats"]
+
+    for key in ("today_seconds", "week_seconds", "total_seconds", "streak_days"):
+        assert stats[key] is None, key
+    assert stats["recent_days"] is None
+    # Counts from the user's progress records do not depend on the stats call.
+    assert stats["books_finished"] == 3
+
+    # Missing stats are retried on the next poll, not after the slow interval.
+    mock_client.async_get_listening_stats.side_effect = None
+    await coordinator.async_refresh()
+    assert coordinator.data["stats"]["total_seconds"] == 900_000

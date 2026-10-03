@@ -9,7 +9,7 @@
  */
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 
 class FakeElement {
   constructor(tag) {
@@ -270,4 +270,135 @@ test("getCardSize grows with the number of sections", () => {
     sections: ["now", "progress", "finished", "added", "stats"],
   });
   assert.ok(big.getCardSize() > small.getCardSize());
+});
+
+/**
+ * A stand-in for hass.connection. Each subscribeMessage call takes the next
+ * scripted outcome: an Error to reject with, or a payload to deliver.
+ */
+function fakeHass(outcomes) {
+  const calls = [];
+  const unsubscribed = [];
+  return {
+    calls,
+    unsubscribed,
+    callWS: async () => ({ path: "/signed" }),
+    connection: {
+      async subscribeMessage(callback, message) {
+        calls.push(message);
+        const outcome = outcomes.shift();
+        if (outcome instanceof Error) throw outcome;
+        if (outcome) callback(outcome);
+        return () => unsubscribed.push(message);
+      },
+    },
+  };
+}
+
+/** Let pending promise callbacks run. */
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+test("shows a dash for listening stats that have not loaded", async () => {
+  const pending = {
+    ...PAYLOAD,
+    stats: {
+      today_seconds: null,
+      week_seconds: null,
+      total_seconds: null,
+      streak_days: null,
+      books_finished: 3,
+      recent_days: null,
+    },
+  };
+  const { html } = await renderCard({ sections: ["stats"] }, pending);
+  assert.match(html, /–<\/div>\s*<div class="label">Today/);
+  assert.match(html, /–<\/div>\s*<div class="label">Total/);
+  assert.doesNotMatch(html, /0m/);
+  assert.doesNotMatch(html, /class="spark"/);
+});
+
+test("retries a failed subscription instead of staying on the error", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const notFound = Object.assign(new Error("not found"), { code: "not_found" });
+    const hass = fakeHass([notFound, PAYLOAD]);
+    const card = new CardClass();
+    card.setConfig({ type: "custom:audiobookshelf-card" });
+    card.isConnected = true;
+    card.hass = hass;
+    await settle();
+    assert.match(card.shadowRoot.querySelector().innerHTML, /No Audiobookshelf server found/);
+
+    mock.timers.tick(5000);
+    await settle();
+    assert.equal(hass.calls.length, 2);
+    assert.match(card.shadowRoot.querySelector().innerHTML, /Dune/);
+    assert.doesNotMatch(card.shadowRoot.querySelector().innerHTML, /No Audiobookshelf/);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("backs off between retries and stops when removed from the page", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const down = new Error("down");
+    const hass = fakeHass([down, down, down]);
+    const card = new CardClass();
+    card.setConfig({ type: "custom:audiobookshelf-card" });
+    card.isConnected = true;
+    card.hass = hass;
+    await settle();
+
+    mock.timers.tick(5000);
+    await settle();
+    assert.equal(hass.calls.length, 2);
+    // The second wait is twice as long.
+    mock.timers.tick(5000);
+    await settle();
+    assert.equal(hass.calls.length, 2);
+    mock.timers.tick(5000);
+    await settle();
+    assert.equal(hass.calls.length, 3);
+
+    card.disconnectedCallback();
+    mock.timers.tick(60000);
+    await settle();
+    assert.equal(hass.calls.length, 3);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("switching entry_id resubscribes to the new server", async () => {
+  const other = { ...PAYLOAD, entry_id: "other", now: { ...PAYLOAD.now, title: "Emma" } };
+  const hass = fakeHass([PAYLOAD, other]);
+  const card = new CardClass();
+  card.setConfig({ type: "custom:audiobookshelf-card", entry_id: "abc123" });
+  card.isConnected = true;
+  card.hass = hass;
+  await settle();
+  assert.match(card.shadowRoot.querySelector().innerHTML, /Dune/);
+
+  card.setConfig({ type: "custom:audiobookshelf-card", entry_id: "other" });
+  await settle();
+  assert.deepEqual(hass.unsubscribed, [{ type: "audiobookshelf/subscribe", entry_id: "abc123" }]);
+  assert.deepEqual(hass.calls.at(-1), { type: "audiobookshelf/subscribe", entry_id: "other" });
+  const html = card.shadowRoot.querySelector().innerHTML;
+  assert.match(html, /<div class="title">Emma<\/div>/);
+  assert.doesNotMatch(html, /<div class="title">Dune<\/div>/);
+});
+
+test("re-applying the same config keeps the existing subscription", async () => {
+  const hass = fakeHass([PAYLOAD]);
+  const card = new CardClass();
+  card.setConfig({ type: "custom:audiobookshelf-card", entry_id: "abc123" });
+  card.isConnected = true;
+  card.hass = hass;
+  await settle();
+
+  card.setConfig({ type: "custom:audiobookshelf-card", entry_id: "abc123", limit: 3 });
+  await settle();
+  assert.equal(hass.calls.length, 1);
+  assert.deepEqual(hass.unsubscribed, []);
 });

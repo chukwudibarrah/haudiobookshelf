@@ -200,3 +200,31 @@ async def test_diagnostics_redacts_secrets(
     assert "exp_abcdef1234567890" not in dumped
     assert "192.168.1.10" not in dumped
     assert diagnostics["coordinator"]["counts"]["finished"] == 2
+
+
+async def test_listening_sensors_unknown_without_stats(
+    hass, mock_config_entry, mock_client
+) -> None:
+    """Without stats, time sensors are unknown, never a reset-triggering zero."""
+    from custom_components.audiobookshelf.api import AudiobookshelfConnectionError
+
+    mock_client.async_get_listening_stats.side_effect = AudiobookshelfConnectionError("x")
+    await setup_integration(hass, mock_config_entry)
+
+    for suffix in (
+        "listening_time_today",
+        "listening_time_this_week",
+        "listening_time_total",
+        "listening_streak",
+    ):
+        assert hass.states.get(f"sensor.audiobookshelf_badrat_{suffix}").state == "unknown"
+    assert hass.states.get("sensor.audiobookshelf_badrat_books_finished").state == "3"
+
+
+async def test_books_finished_is_not_total_increasing(
+    hass, mock_config_entry, mock_client
+) -> None:
+    """Marking a book unfinished lowers the count; that must not read as a reset."""
+    await setup_integration(hass, mock_config_entry)
+    state = hass.states.get("sensor.audiobookshelf_badrat_books_finished")
+    assert state.attributes["state_class"] == "total"

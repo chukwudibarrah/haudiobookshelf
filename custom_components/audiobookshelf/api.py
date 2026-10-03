@@ -8,6 +8,7 @@ coordinator's job.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import aiohttp
@@ -16,6 +17,9 @@ _LOGGER = logging.getLogger(__name__)
 
 TIMEOUT = aiohttp.ClientTimeout(total=20)
 COVER_TIMEOUT = aiohttp.ClientTimeout(total=30)
+
+# Audiobookshelf IDs are prefixed slugs (li_8gch9ve09orgn4fdz8) or UUIDs.
+_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 
 
 class AudiobookshelfError(Exception):
@@ -32,6 +36,18 @@ class AudiobookshelfAuthError(AudiobookshelfError):
 
 class AudiobookshelfNotFoundError(AudiobookshelfError):
     """The requested resource does not exist."""
+
+
+def _path_id(value: str) -> str:
+    """Return an ID that is safe to put in a URL path, or raise.
+
+    IDs reach the client from service calls and the card's websocket, which
+    any Home Assistant user can send. Unchecked, an ID such as ``../../x``
+    would aim a request carrying our API token at another endpoint.
+    """
+    if not _ID_PATTERN.fullmatch(str(value)):
+        raise AudiobookshelfNotFoundError(f"Not a valid Audiobookshelf ID: {value!r}")
+    return value
 
 
 class AudiobookshelfClient:
@@ -148,22 +164,24 @@ class AudiobookshelfClient:
         }
         if library_filter:
             params["filter"] = library_filter
-        data = await self._request("GET", f"/api/libraries/{library_id}/items", params=params)
+        data = await self._request(
+            "GET", f"/api/libraries/{_path_id(library_id)}/items", params=params
+        )
         return data.get("results") or []
 
     async def async_get_library_stats(self, library_id: str) -> dict[str, Any]:
         """Return the item/size totals for a library."""
-        return await self._request("GET", f"/api/libraries/{library_id}/stats")
+        return await self._request("GET", f"/api/libraries/{_path_id(library_id)}/stats")
 
     async def async_get_item(self, item_id: str) -> dict[str, Any]:
         """Return a single library item."""
-        return await self._request("GET", f"/api/items/{item_id}")
+        return await self._request("GET", f"/api/items/{_path_id(item_id)}")
 
     async def async_get_series(self, library_id: str, limit: int = 20) -> list[dict[str, Any]]:
         """Return series in a library, most recently added first."""
         data = await self._request(
             "GET",
-            f"/api/libraries/{library_id}/series",
+            f"/api/libraries/{_path_id(library_id)}/series",
             params={"limit": limit, "page": 0, "sort": "addedAt", "desc": 1},
         )
         return data.get("results") or []
@@ -175,16 +193,16 @@ class AudiobookshelfClient:
         episode_id: str | None = None,
     ) -> None:
         """Patch the user's progress for an item (or a podcast episode)."""
-        path = f"/api/me/progress/{item_id}"
+        path = f"/api/me/progress/{_path_id(item_id)}"
         if episode_id:
-            path = f"{path}/{episode_id}"
+            path = f"{path}/{_path_id(episode_id)}"
         await self._request("PATCH", path, json=payload)
 
     async def async_get_cover(
         self, item_id: str, width: int = 400, raw: bool = False
     ) -> tuple[bytes, str]:
         """Return the cover image bytes and content type for an item."""
-        url = f"{self._url}/api/items/{item_id}/cover"
+        url = f"{self._url}/api/items/{_path_id(item_id)}/cover"
         params: dict[str, Any] = {"raw": 1} if raw else {"width": width}
         headers = {}
         if self._token:

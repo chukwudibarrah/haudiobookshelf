@@ -85,6 +85,13 @@ def _minutes(seconds: Any) -> float | None:
     return round(float(seconds) / 60, 1)
 
 
+def _hours(seconds: Any) -> float | None:
+    """Convert seconds to hours, rounded for display."""
+    if seconds in (None, ""):
+        return None
+    return round(float(seconds) / 3600, 2)
+
+
 SENSORS: tuple[AudiobookshelfSensorDescription, ...] = (
     AudiobookshelfSensorDescription(
         key="now_listening",
@@ -145,7 +152,9 @@ SENSORS: tuple[AudiobookshelfSensorDescription, ...] = (
         translation_key="books_finished",
         icon="mdi:book-check-outline",
         native_unit_of_measurement="books",
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        # Not total_increasing: marking a book unfinished lowers the count, and
+        # Home Assistant would record that as a meter reset.
+        state_class=SensorStateClass.TOTAL,
         value_fn=lambda data: (data.get("stats") or {}).get("books_finished"),
         attributes_fn=lambda data: {"items": _titles(data.get("finished"))},
     ),
@@ -186,9 +195,7 @@ SENSORS: tuple[AudiobookshelfSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfTime.HOURS,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=1,
-        value_fn=lambda data: round(
-            float((data.get("stats") or {}).get("total_seconds") or 0) / 3600, 2
-        ),
+        value_fn=lambda data: _hours((data.get("stats") or {}).get("total_seconds")),
         attributes_fn=lambda data: {
             "recent_days": (data.get("stats") or {}).get("recent_days")
         },

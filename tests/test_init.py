@@ -145,3 +145,22 @@ async def test_options_update_reloads_entry(hass, mock_config_entry, mock_client
 
     coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]
     assert coordinator.update_interval.total_seconds() == 120
+
+
+async def test_set_progress_uses_the_episode_duration(
+    hass, mock_config_entry, mock_client
+) -> None:
+    """For a podcast, the position comes from the named episode's duration."""
+    from .test_coordinator import _setup_with_podcast
+
+    await _setup_with_podcast(hass, mock_config_entry, mock_client)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_PROGRESS,
+        {ATTR_ITEM_ID: "li_podcast", "episode_id": "ep_1", ATTR_PERCENT: 50},
+        blocking=True,
+    )
+    args = mock_client.async_update_progress.await_args
+    assert args.args[:2] == ("li_podcast", {"progress": 0.5, "currentTime": 1800.0})
+    assert args.kwargs == {"episode_id": "ep_1"}

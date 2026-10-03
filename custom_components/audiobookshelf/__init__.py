@@ -212,19 +212,18 @@ def _async_register_services(hass: HomeAssistant) -> None:
         """Move the playback position of an item."""
         coordinator = _coordinator_for(call)
         item_id = call.data[ATTR_ITEM_ID]
+        episode_id = call.data.get(ATTR_EPISODE_ID)
+        book = coordinator.async_get_book(item_id, episode_id)
+        duration = (book or {}).get("duration")
 
         if ATTR_CURRENT_TIME in call.data:
             current_time = float(call.data[ATTR_CURRENT_TIME])
             payload: dict[str, Any] = {"currentTime": current_time}
-            book = coordinator.async_get_book(item_id)
-            duration = (book or {}).get("duration")
             if duration:
                 payload["progress"] = max(0.0, min(1.0, current_time / float(duration)))
         elif ATTR_PERCENT in call.data:
             fraction = float(call.data[ATTR_PERCENT]) / 100
             payload = {"progress": fraction}
-            book = coordinator.async_get_book(item_id)
-            duration = (book or {}).get("duration")
             if duration:
                 payload["currentTime"] = fraction * float(duration)
         else:
@@ -232,7 +231,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
         try:
             await coordinator.client.async_update_progress(
-                item_id, payload, episode_id=call.data.get(ATTR_EPISODE_ID)
+                item_id, payload, episode_id=episode_id
             )
         except AudiobookshelfError as err:
             raise HomeAssistantError(f"Audiobookshelf rejected the update: {err}") from err

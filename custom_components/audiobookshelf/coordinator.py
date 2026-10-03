@@ -287,6 +287,16 @@ class AudiobookshelfCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             item = await self._async_get_item_cached(item_id)
             if item is None:
                 continue
+            episode_id = progress.get("episodeId")
+            if episode_id:
+                # A full podcast item has no recentEpisode; without one the
+                # episode would be shown as the podcast and lose its ID.
+                episodes = (item.get("media") or {}).get("episodes") or []
+                episode = next(
+                    (ep for ep in episodes if ep.get("id") == episode_id),
+                    {"id": episode_id},
+                )
+                item = {**item, "recentEpisode": episode}
             book = self._book_from_item(item, progress_map, progress_override=progress)
             if book:
                 finished.append(book)
@@ -315,16 +325,14 @@ class AudiobookshelfCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return item or None
 
     def _build_stats(self, progress_map: dict[str, dict[str, Any]]) -> dict[str, Any]:
-        """Assemble the listening statistics block."""
-        days: dict[str, Any] = self._stats.get("days") or {}
-        today_key = dt_util.now().date().isoformat()
-        today = float(self._stats.get("today") or days.get(today_key) or 0)
+        """Assemble the listening statistics block.
 
-        week = 0.0
-        for offset in range(7):
-            key = (dt_util.now().date() - timedelta(days=offset)).isoformat()
-            week += float(days.get(key) or 0)
-
+        Until listening stats have been fetched at least once, the time-based
+        figures are None rather than 0. A false 0 is not just wrong on screen:
+        ``listening_total`` is a total_increasing sensor, so a drop to 0 is
+        recorded as a meter reset and the whole lifetime is counted again in
+        long-term statistics when the real value comes back.
+        """
         finished_count = sum(
             1 for progress in progress_map.values() if progress.get("isFinished")
         )
@@ -334,16 +342,36 @@ class AudiobookshelfCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if not progress.get("isFinished") and float(progress.get("progress") or 0) > 0
         )
 
-        return {
-            "today_seconds": round(today),
-            "week_seconds": round(week),
-            "total_seconds": round(float(self._stats.get("totalTime") or 0)),
-            "streak_days": self._calculate_streak(days),
+        stats: dict[str, Any] = {
+            "today_seconds": None,
+            "week_seconds": None,
+            "total_seconds": None,
+            "streak_days": None,
             "books_finished": finished_count,
             "books_in_progress": in_progress_count,
             "library_items": sum(self._library_totals.values()) or None,
-            "recent_days": self._recent_days(days),
+            "recent_days": None,
         }
+        if not self._stats:
+            return stats
+
+        days: dict[str, Any] = self._stats.get("days") or {}
+        today_key = dt_util.now().date().isoformat()
+        today = float(self._stats.get("today") or days.get(today_key) or 0)
+
+        week = 0.0
+        for offset in range(7):
+            key = (dt_util.now().date() - timedelta(days=offset)).isoformat()
+            week += float(days.get(key) or 0)
+
+        stats.update(
+            today_seconds=round(today),
+            week_seconds=round(week),
+            total_seconds=round(float(self._stats.get("totalTime") or 0)),
+            streak_days=self._calculate_streak(days),
+            recent_days=self._recent_days(days),
+        )
+        return stats
 
     def _recent_days(self, days: dict[str, Any]) -> list[dict[str, Any]]:
         """Return the last 30 days of listening time, oldest first.
@@ -432,7 +460,9 @@ class AudiobookshelfCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "book_title": metadata.get("title"),
             "subtitle": metadata.get("subtitle"),
             "author": metadata.get("authorName")
-            or _join_names(metadata.get("authors"), "name"),
+            or _join_names(metadata.get("authors"), "name")
+            # Podcasts carry a plain author string instead.
+            or metadata.get("author"),
             "narrator": metadata.get("narratorName") or _join_names(metadata.get("narrators")),
             "series": series_name,
             "series_sequence": sequence,
@@ -465,12 +495,20 @@ class AudiobookshelfCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
         return book
 
-    def async_get_book(self, item_id: str) -> dict[str, Any] | None:
-        """Look a book up in the most recent data, across every list."""
+    def async_get_book(
+        self, item_id: str, episode_id: str | None = None
+    ) -> dict[str, Any] | None:
+        """Look a book up in the most recent data, across every list.
+
+        Several episodes of one podcast share an item ID, so pass the episode
+        ID to get the right one (and the right duration).
+        """
         if not self.data:
             return None
         for key in ("in_progress", "finished", "recently_added"):
             for book in self.data.get(key) or []:
-                if book.get("id") == item_id:
+                if book.get("id") == item_id and (
+                    not episode_id or book.get("episode_id") == episode_id
+                ):
                     return book
         return None
